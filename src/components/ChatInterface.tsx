@@ -1,116 +1,96 @@
+'use client';
+
 import React, { useState, useEffect, useRef } from 'react';
-import { Chat, GenerateContentResponse } from "@google/genai";
-import { createBookingChatSession, sendMessageStream } from '../services/gemini';
-import { Booking, Message } from '../types';
+import { Booking, Message } from '@/types';
+import { apiClient } from '@/lib/api';
 
 interface ChatInterfaceProps {
   booking: Booking;
 }
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({ booking }) => {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 'sys-1',
-      text: 'October 25, 2023',
-      sender: 'system',
-      timestamp: new Date('2023-10-25T00:00:00')
-    },
-    {
-      id: 'tech-1',
-      text: "Hi there! This is John, your technician. I'm on my way and expect to arrive in about 15 minutes.",
-      sender: 'technician',
-      timestamp: new Date('2023-10-25T13:45:00')
-    },
-    {
-      id: 'usr-1',
-      text: "Great, thanks for the update! See you soon.",
-      sender: 'user',
-      timestamp: new Date('2023-10-25T13:46:00')
-    },
-    {
-      id: 'sys-2',
-      text: "Job status updated to In Progress",
-      sender: 'system',
-      timestamp: new Date('2023-10-25T13:50:00')
-    },
-    {
-      id: 'ai-intro',
-      text: "Hello! I'm the automated support assistant. How can I help you with this booking today?",
-      sender: 'ai',
-      timestamp: new Date()
-    }
-  ]);
-  
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const chatSessionRef = useRef<Chat | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Initialize Chat Session
+  // Fetch messages when component mounts
   useEffect(() => {
-    chatSessionRef.current = createBookingChatSession(booking);
-  }, [booking]);
+    fetchMessages();
+  }, [booking.id]);
 
-  // Scroll to bottom
+  // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  const fetchMessages = async () => {
+    try {
+      setIsLoading(true);
+      const response = await apiClient.getMessages(booking.id);
+      
+      if (response.success) {
+        const transformed = response.data.map((msg: any) => ({
+          id: msg.id,
+          text: msg.message,
+          sender: msg.senderType === 'customer' ? 'user' : 'system',
+          timestamp: new Date(msg.createdAt)
+        }));
+        setMessages(transformed);
+      }
+    } catch (error) {
+      console.error('Error fetching messages:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSendMessage = async () => {
-    if (!inputValue.trim() || isSending || !chatSessionRef.current) return;
+    if (!inputValue.trim() || isSending) return;
 
     const userText = inputValue;
     setInputValue('');
     setIsSending(true);
 
-    // Add User Message
-    const userMsg: Message = {
-      id: Date.now().toString(),
+    // Optimistically add user message
+    const tempMsg: Message = {
+      id: 'temp-' + Date.now(),
       text: userText,
       sender: 'user',
       timestamp: new Date()
     };
-    setMessages(prev => [...prev, userMsg]);
+    setMessages(prev => [...prev, tempMsg]);
 
     try {
-      // Create a placeholder for AI response
-      const aiMsgId = (Date.now() + 1).toString();
-      setMessages(prev => [
-        ...prev,
-        {
-          id: aiMsgId,
-          text: '',
-          sender: 'ai',
-          timestamp: new Date(),
-          isTyping: true
-        }
-      ]);
-
-      const stream = await sendMessageStream(chatSessionRef.current, userText);
+      const response = await apiClient.sendMessage(booking.id, userText);
       
-      let fullText = '';
-      
-      for await (const chunk of stream) {
-        const c = chunk as GenerateContentResponse;
-        if (c.text) {
-          fullText += c.text;
-          setMessages(prev => 
-            prev.map(msg => 
-              msg.id === aiMsgId 
-                ? { ...msg, text: fullText, isTyping: false } 
-                : msg
-            )
-          );
-        }
+      if (response.success) {
+        // Replace temp message with real one
+        setMessages(prev => 
+          prev.map(msg => 
+            msg.id === tempMsg.id 
+              ? {
+                  id: response.data.id,
+                  text: response.data.message,
+                  sender: 'user',
+                  timestamp: new Date(response.data.createdAt)
+                }
+              : msg
+          )
+        );
       }
+    } catch (error: any) {
+      console.error('Error sending message:', error);
+      // Remove temp message on error
+      setMessages(prev => prev.filter(msg => msg.id !== tempMsg.id));
       
-    } catch (error) {
-      console.error("Error sending message to Gemini:", error);
+      // Show error message
       setMessages(prev => [
         ...prev,
         {
           id: Date.now().toString(),
-          text: "I'm having trouble connecting to the support system right now. Please try again later.",
+          text: "Failed to send message. Please try again.",
           sender: 'system',
           timestamp: new Date()
         }
@@ -128,12 +108,22 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ booking }) => {
     <div className="bg-white dark:bg-background-dark/80 rounded-xl shadow-sm h-[80vh] flex flex-col border border-border-light dark:border-gray-800">
       {/* Header */}
       <div className="p-4 border-b border-border-light dark:border-gray-800">
-        <h3 className="text-lg font-bold text-[#111818] dark:text-white">Communication Hub</h3>
+        <h3 className="text-lg font-bold text-[#111818] dark:text-white">Messages</h3>
+        <p className="text-xs text-gray-500 mt-1">Chat about this booking</p>
       </div>
 
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-[#FAFAFA] dark:bg-[#102222]">
-        {messages.map((msg) => {
+        {isLoading ? (
+          <div className="flex justify-center items-center h-full">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-accent" />
+          </div>
+        ) : messages.length === 0 ? (
+          <div className="flex justify-center items-center h-full text-gray-400 text-sm">
+            No messages yet. Start a conversation!
+          </div>
+        ) : (
+          messages.map((msg) => {
           if (msg.sender === 'system') {
             return (
               <div key={msg.id} className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400 justify-center">
@@ -156,15 +146,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ booking }) => {
           return (
             <div key={msg.id} className={`flex gap-3 ${isUser ? 'justify-end' : ''}`}>
               {!isUser && (
-                <div 
-                  className="shrink-0 bg-center bg-no-repeat aspect-square bg-cover rounded-full size-8 border border-gray-200 dark:border-gray-700" 
-                  style={{ backgroundImage: isTech ? `url("${booking.technician.avatar}")` : 'none' }}
-                >
-                    {!isTech && (
-                        <div className="w-full h-full flex items-center justify-center bg-teal-accent rounded-full text-white">
-                            <span className="material-symbols-outlined text-sm">smart_toy</span>
-                        </div>
-                    )}
+                <div className="shrink-0 w-8 h-8 flex items-center justify-center bg-gray-200 dark:bg-gray-700 rounded-full text-gray-600 dark:text-gray-300">
+                  <span className="material-symbols-outlined text-sm">support_agent</span>
                 </div>
               )}
               
@@ -177,28 +160,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ booking }) => {
                   }`}
                 >
                   <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
-                  {msg.isTyping && (
-                      <span className="inline-flex mt-1 space-x-1 animate-pulse">
-                          <span className="w-1.5 h-1.5 bg-gray-400 rounded-full"></span>
-                          <span className="w-1.5 h-1.5 bg-gray-400 rounded-full"></span>
-                          <span className="w-1.5 h-1.5 bg-gray-400 rounded-full"></span>
-                      </span>
-                  )}
                 </div>
                 <p className={`text-xs text-gray-400 mt-1 ${isUser ? 'text-right' : ''}`}>
-                  {isUser ? 'You' : (isTech ? booking.technician.name : 'Support Assistant')} - {formatTime(msg.timestamp)}
+                  {isUser ? 'You' : 'System'} - {formatTime(msg.timestamp)}
                 </p>
               </div>
 
               {isUser && (
-                <div 
-                  className="shrink-0 bg-center bg-no-repeat aspect-square bg-cover rounded-full size-8" 
-                  style={{ backgroundImage: `url("https://lh3.googleusercontent.com/aida-public/AB6AXuALHJUV4s8yt5PjxCOAF5DCW5DRLajOpSViQ2k68hMtLgarXcbXdSwEN-dmSTMArzLtmzn5WzGoMMJOKVrv8Cl1mfK3z-iK10VCKgTDwj7YcP7slA2Yh7185Z2p2YcqvyIqniOoatG6s3A3ep6dN4fYMeBsPw8j1kmQrKMGrGXn2jrq9CEX-MiGkiWzxKcUIpZQwn79BiU1DTCHhiIMlIHgjrV-pf-295JoMI0xMDG92wEWsce0uV6imWnAQXjZswyuHqpvCJT6Fw")` }}
-                ></div>
+                <div className="shrink-0 w-8 h-8 flex items-center justify-center bg-teal-accent rounded-full text-white">
+                  <span className="material-symbols-outlined text-sm">person</span>
+                </div>
               )}
             </div>
           );
-        })}
+        }))}
         <div ref={messagesEndRef} />
       </div>
 
@@ -230,3 +205,4 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ booking }) => {
 };
 
 export default ChatInterface;
+

@@ -1,9 +1,19 @@
 import { GoogleGenAI, Chat, GenerateContentResponse } from "@google/genai";
-import { Booking } from "../types";
+import { Booking } from "@/types";
 
 // Initialize Gemini Client
-// WARNING: process.env.API_KEY is assumed to be present in the environment.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Access API key from environment variable
+const getApiKey = () => {
+  if (typeof window !== 'undefined') {
+    // Client-side: use environment variable exposed via next.config
+    return process.env.GEMINI_API_KEY;
+  } else {
+    // Server-side: use environment variable directly
+    return process.env.GEMINI_API_KEY;
+  }
+};
+
+const ai = new GoogleGenAI({ apiKey: getApiKey() || '' });
 
 const MODEL_NAME = 'gemini-3-pro-preview';
 
@@ -42,3 +52,4 @@ but you can mark it as 'requested'.
 export const sendMessageStream = async (chat: Chat, message: string) => {
   return await chat.sendMessageStream({ message });
 };
+
