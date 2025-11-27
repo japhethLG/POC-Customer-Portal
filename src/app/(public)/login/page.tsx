@@ -8,8 +8,8 @@ import { apiClient } from '@/lib/api';
 export default function LoginPage() {
   const router = useRouter();
   const [loginType, setLoginType] = useState<'email' | 'phone'>('email');
-  const [email, setEmail] = useState('john@example.com');
-  const [phone, setPhone] = useState('+1234567890');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('password123');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
