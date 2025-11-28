@@ -14,6 +14,8 @@ export default function BookingDetailPage() {
   const [booking, setBooking] = useState<Booking | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -81,6 +83,28 @@ export default function BookingDetailPage() {
     }
   };
 
+  const handleDeleteBooking = async () => {
+    if (!booking) return;
+    
+    setIsDeleting(true);
+    try {
+      const response = await apiClient.deleteJob(booking.id);
+      
+      if (response.success) {
+        // Redirect to dashboard with success message
+        router.push('/dashboard?deleted=true');
+      } else {
+        setError('Failed to delete booking');
+      }
+    } catch (err: any) {
+      console.error('Error deleting booking:', err);
+      setError(err.message || 'Failed to delete booking');
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteModal(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center min-h-screen bg-background-light dark:bg-background-dark">
@@ -132,6 +156,15 @@ export default function BookingDetailPage() {
             <div className="flex flex-col gap-1">
               <p className="text-[#111818] dark:text-white text-3xl font-black leading-tight tracking-[-0.033em]">Booking {booking.id}</p>
               <p className="text-gray-500 dark:text-gray-400 text-base font-normal leading-normal">Here are the details for your upcoming service.</p>
+            </div>
+            <div className="flex gap-3 items-start">
+              <button
+                onClick={() => setShowDeleteModal(true)}
+                className="flex items-center justify-center gap-2 cursor-pointer rounded-lg h-10 px-4 bg-red-600 hover:bg-red-700 text-white text-sm font-bold leading-normal tracking-[0.015em] transition-colors"
+              >
+                <span className="material-symbols-outlined !text-xl">delete</span>
+                <span className="truncate">Delete Booking</span>
+              </button>
             </div>
           </div>
 
@@ -233,6 +266,51 @@ export default function BookingDetailPage() {
           </div>
         </div>
       </main>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="flex items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30 size-12 text-red-600 dark:text-red-400">
+                <span className="material-symbols-outlined text-2xl">warning</span>
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white">Delete Booking</h3>
+            </div>
+            
+            <p className="text-gray-600 dark:text-gray-400 mb-6">
+              Are you sure you want to delete this booking? This action cannot be undone. The booking will be cancelled in ServiceM8.
+            </p>
+            
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-800 text-gray-800 dark:text-gray-200 font-medium hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteBooking}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {isDeleting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined !text-lg">delete</span>
+                    <span>Delete</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

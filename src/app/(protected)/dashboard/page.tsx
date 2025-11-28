@@ -10,10 +10,21 @@ export default function DashboardPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
     checkAuth();
     fetchBookings();
+    
+    // Check for success message from URL
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('deleted') === 'true') {
+      setSuccessMessage('Booking deleted successfully');
+      // Clear the URL parameter
+      window.history.replaceState({}, '', '/dashboard');
+      // Clear message after 5 seconds
+      setTimeout(() => setSuccessMessage(''), 5000);
+    }
   }, []);
 
   const checkAuth = () => {
@@ -139,6 +150,13 @@ export default function DashboardPage() {
           {error && (
             <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300 px-4 py-3 rounded-lg mb-4">
               {error}
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-300 px-4 py-3 rounded-lg mb-4 flex items-center gap-2">
+              <span className="material-symbols-outlined">check_circle</span>
+              {successMessage}
             </div>
           )}
 
