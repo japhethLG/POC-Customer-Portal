@@ -52,7 +52,9 @@ export default function CreateJobPage() {
       const jobData = {
         job_address: formData.job_address,
         job_description: formData.job_description,
-        scheduled_date: formData.scheduled_date || undefined,
+        scheduled_date: formData.scheduled_date 
+          ? new Date(formData.scheduled_date).toISOString() 
+          : undefined,
         status: formData.status,
       };
 
